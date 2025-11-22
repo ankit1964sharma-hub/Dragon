@@ -28,6 +28,18 @@ export function startDiscordBot() {
     console.log(`🤖 Bot is ready to serve ${c.guilds.cache.size} server(s)`);
   });
 
+  client.on('error', (error) => {
+    console.error("[BOT ERROR]", error);
+  });
+
+  client.on('warn', (warning) => {
+    console.warn("[BOT WARNING]", warning);
+  });
+
+  client.on(Events.ClientReady, () => {
+    console.log('[BOT] Ready event fired');
+  });
+
   client.on(Events.InteractionCreate, async (interaction) => {
     try {
       if (interaction.isButton()) {
