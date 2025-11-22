@@ -1,4 +1,28 @@
-@import "tailwindcss";
+import * as fs from 'fs';
+import * as path from 'path';
+
+const htmlContent = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dragon - Bot Dashboard</title>
+    <meta property="og:title" content="Dragon Bot Dashboard" />
+    <meta property="og:description" content="Manage your Discord bot, track messages and Pokémon catches, and earn Pokecoins." />
+    <meta property="og:image" content="/og-image.png" />
+    <meta property="twitter:title" content="Dragon Bot Dashboard" />
+    <meta property="twitter:description" content="Manage your Discord bot, track messages and Pokémon catches, and earn Pokecoins." />
+    <meta property="twitter:image" content="/og-image.png" />
+    <meta name="twitter:site" content="@replit" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>`;
+
+const cssContent = `@import "tailwindcss";
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
@@ -53,45 +77,32 @@
   --color-sidebar-ring: hsl(var(--sidebar-ring));
 }
 
-/* DARK MODE DEFAULT (Discord-inspired + Cyberpunk) */
 :root {
   --background: 224 71% 4%;
   --foreground: 213 31% 91%;
-
   --card: 224 71% 4%;
   --card-foreground: 213 31% 91%;
-
   --popover: 224 71% 4%;
   --popover-foreground: 215 20.2% 65.1%;
-
-  /* Blurple */
   --primary: 252 59% 57%;
   --primary-foreground: 0 0% 100%;
-
   --secondary: 222 47% 11%;
   --secondary-foreground: 210 40% 98%;
-
   --muted: 223 47% 11%;
   --muted-foreground: 215 20.2% 65.1%;
-
   --accent: 252 59% 48%;
   --accent-foreground: 210 40% 98%;
-
   --destructive: 0 63% 31%;
   --destructive-foreground: 210 40% 98%;
-
   --border: 217 33% 17%;
   --input: 217 33% 17%;
   --ring: 252 59% 57%;
-
   --radius: 0.5rem;
-
   --chart-1: 252 59% 57%;
   --chart-2: 220 70% 50%;
   --chart-3: 340 75% 55%;
   --chart-4: 280 65% 60%;
   --chart-5: 160 60% 45%;
-
   --sidebar: 224 71% 4%;
   --sidebar-foreground: 240 5% 64.9%;
   --sidebar-primary: 224.3 76.3% 48%;
@@ -100,7 +111,6 @@
   --sidebar-accent-foreground: 240 4.8% 95.9%;
   --sidebar-border: 240 3.7% 15.9%;
   --sidebar-ring: 217.2 91.2% 59.8%;
-  
   --font-sans: 'Inter', sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 }
@@ -112,4 +122,12 @@
   body {
     @apply font-sans antialiased bg-background text-foreground;
   }
-}
+}`;
+
+// Generate files
+fs.mkdirSync('client', { recursive: true });
+fs.mkdirSync('client/src', { recursive: true });
+fs.writeFileSync('client/index.html', htmlContent);
+fs.writeFileSync('client/src/index.css', cssContent);
+console.log('✅ Generated client/index.html');
+console.log('✅ Generated client/src/index.css');
