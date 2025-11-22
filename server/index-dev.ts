@@ -1,1 +1,0 @@
-import('./index-dev.js');
