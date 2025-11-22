@@ -8,12 +8,15 @@ const POKETWO_BOT_ID = "716390085896962058";
 const pendingWithdrawals = new Map();
 
 export function startDiscordBot() {
+  console.log('[BOT] startDiscordBot() called');
   const token = process.env.DISCORD_BOT_TOKEN;
 
   if (!token) {
     console.error("❌ DISCORD_BOT_TOKEN not found in environment variables");
     return;
   }
+
+  console.log('[BOT] Token found, creating client...');
 
   const client = new Client({
     intents: [
@@ -861,7 +864,13 @@ export function startDiscordBot() {
     }
   }
 
-  client.login(token);
+  console.log('[BOT] About to call client.login()...');
+  client.login(token).then(() => {
+    console.log('[BOT] Login promise resolved');
+  }).catch(err => {
+    console.error('[BOT] Login error:', err);
+  });
 
+  console.log('[BOT] startDiscordBot() returning');
   return client;
 }
