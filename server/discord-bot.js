@@ -506,7 +506,8 @@ export function startDiscordBot() {
               { name: "🪙 Pokecoins", value: `${profileUser.pokecoins}`, inline: true },
               { name: "📊 Message Rank", value: `#${messageRankPosition}`, inline: true },
               { name: "🎖️ Catch Rank", value: `#${catchRankPos}`, inline: true },
-              { name: "✨ Shiny Count", value: `${profileUser.shinyCatches || 0}`, inline: true }
+              { name: "✨ Shiny Count", value: `${profileUser.shinyCatches || 0}`, inline: true },
+              { name: "💎 Rare Shiny", value: `${profileUser.rareShinyCatches || 0}`, inline: true }
             )
             .setFooter({ text: "Keep grinding to reach the top!" })
             .setTimestamp();
@@ -533,7 +534,7 @@ export function startDiscordBot() {
             await message.reply({ embeds: [messageLbEmbed] });
           } else if (leaderboardType === "catches") {
             const catchLeaderboard = allLbUsers.sort((a, b) => b.catches - a.catches).slice(0, 10);
-            const catchText = catchLeaderboard.map((u, i) => `**${i + 1}.** <@${u.id}> - ${u.catches} catches`).join('\n');
+            const catchText = catchLeaderboard.map((u, i) => `**${i + 1}.** <@${u.id}> - ${u.catches} catches | ✨ ${u.shinyCatches || 0} shiny | 💎 ${u.rareShinyCatches || 0} rare`).join('\n');
 
             const catchLbEmbed = new EmbedBuilder()
               .setColor(0xFF6B6B)
