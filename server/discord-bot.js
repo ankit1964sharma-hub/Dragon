@@ -1,12 +1,11 @@
-import { Client, GatewayIntentBits, Message, Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } from "discord.js";
-import { storage } from "./storage";
+import { Client, GatewayIntentBits, Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } from "discord.js";
+import { storage } from "./storage.js";
 
 const PREFIX = "D";
 const ADMIN_ID = "763625050213187614";
-const POKETWO_BOT_ID = "716390085896962058"; // Poketwo bot ID
+const POKETWO_BOT_ID = "716390085896962058";
 
-// Store pending withdrawals temporarily (userId -> amount)
-const pendingWithdrawals = new Map<string, number>();
+const pendingWithdrawals = new Map();
 
 export function startDiscordBot() {
   const token = process.env.DISCORD_BOT_TOKEN;
@@ -29,31 +28,25 @@ export function startDiscordBot() {
     console.log(`🤖 Bot is ready to serve ${c.guilds.cache.size} server(s)`);
   });
 
-  // Handle button clicks and modal submissions
   client.on(Events.InteractionCreate, async (interaction) => {
     try {
-      // Handle button clicks
       if (interaction.isButton()) {
         const customId = interaction.customId;
 
-        // Check if it's a withdrawal button
         if (customId.startsWith('withdraw_')) {
           const userId = customId.split('_')[1];
 
-          // Verify the user clicking is the same user who initiated
           if (interaction.user.id !== userId) {
             await interaction.reply({ content: "❌ This withdrawal request is not for you!", ephemeral: true });
             return;
           }
 
-          // Get the pending amount
           const amount = pendingWithdrawals.get(userId);
           if (!amount) {
             await interaction.reply({ content: "❌ Withdrawal request expired. Please start a new withdrawal.", ephemeral: true });
             return;
           }
 
-          // Create modal for market ID input
           const modal = new ModalBuilder()
             .setCustomId(`withdraw_modal_${userId}`)
             .setTitle('Enter Market ID');
@@ -66,14 +59,13 @@ export function startDiscordBot() {
             .setRequired(true)
             .setMaxLength(100);
 
-          const actionRow = new ActionRowBuilder<TextInputBuilder>().addComponents(marketIdInput);
+          const actionRow = new ActionRowBuilder().addComponents(marketIdInput);
           modal.addComponents(actionRow);
 
           await interaction.showModal(modal);
         }
       }
 
-      // Handle modal submissions
       if (interaction.isModalSubmit()) {
         const customId = interaction.customId;
 
@@ -84,7 +76,6 @@ export function startDiscordBot() {
 
             console.log(`[WITHDRAW MODAL] User ${userId} submitted market ID: ${marketId}`);
 
-            // Get the pending amount
             const amount = pendingWithdrawals.get(userId);
             if (!amount) {
               console.log(`[WITHDRAW MODAL] No pending withdrawal found for user ${userId}`);
@@ -94,12 +85,10 @@ export function startDiscordBot() {
 
             console.log(`[WITHDRAW MODAL] Pending amount: ${amount}`);
 
-            // Remove from pending
             pendingWithdrawals.delete(userId);
 
             const username = interaction.user.username;
 
-            // Validate market ID
             if (!marketId) {
               console.log(`[WITHDRAW MODAL] Empty market ID provided`);
               await interaction.reply({ content: "❌ Market ID cannot be empty!", ephemeral: true });
@@ -117,13 +106,11 @@ export function startDiscordBot() {
               return;
             }
 
-            // Get withdrawal requests count to assign a number
             const withdrawalMessages = await storage.getWithdrawalRequestsCount();
             const requestNumber = withdrawalMessages + 1;
 
             console.log(`[WITHDRAW MODAL] Creating request #${requestNumber} for user ${userId}, amount: ${amount}, marketId: ${marketId}`);
 
-            // Store withdrawal request
             const withdrawalRequest = await storage.createWithdrawalRequest({
               userId,
               marketId,
@@ -134,8 +121,6 @@ export function startDiscordBot() {
 
             console.log(`[WITHDRAW MODAL] Request created:`, withdrawalRequest);
 
-            // Send embed to withdrawal channel
-            // Clean the channel ID in case it has Discord formatting
             const cleanWithdrawalChannel = withdrawalChannel.replace(/[<#>]/g, '');
             console.log(`[WITHDRAW MODAL] Fetching channel ${cleanWithdrawalChannel}`);
             const channel = await interaction.client.channels.fetch(cleanWithdrawalChannel);
@@ -211,34 +196,28 @@ export function startDiscordBot() {
     }
   });
 
-  client.on(Events.MessageCreate, async (message: Message) => {
+  client.on(Events.MessageCreate, async (message) => {
     const userId = message.author.id;
     const username = message.author.username;
     const discriminator = message.author.discriminator;
     const channelId = message.channel.id;
     const content = message.content;
 
-    // Detect Poketwo catches (when bot sends catch confirmation)
     if (message.author.bot && message.author.id === POKETWO_BOT_ID) {
       try {
-        // Check if catch event is active
         const settings = await storage.getBotSettings();
 
-        // Get user mention first
         const userMention = message.mentions.users.first();
         if (!userMention) {
-          return; // No user mentioned, not a catch
+          return;
         }
 
-        // Validate this is actually a Pokemon catch message
-        // Real catches have "Congratulations" AND user mention AND "caught" in content OR embed
         const hasCongrats = content.toLowerCase().includes("congratulations");
         const embedDescription = message.embeds?.[0]?.description?.toLowerCase() || "";
         const fullText = (content + " " + embedDescription).toLowerCase();
 
         const hasCaught = fullText.includes("caught");
 
-        // Filter out event messages (they usually say "bonus" or "event" or "halloween")
         const isEventMessage = fullText.includes("bonus") || 
                               fullText.includes("event") || 
                               fullText.includes("halloween") ||
@@ -255,17 +234,14 @@ export function startDiscordBot() {
 
         console.log(`[CATCH] Valid catch detected - User: ${catchUserId}, Catch Event Active: ${settings.catchEventActive}`);
 
-        // Only count if catch event is active
         if (!settings.catchEventActive) {
           console.log(`[CATCH] Catch event inactive - not counting`);
           return;
         }
 
-        // Determine catch type from content and embed
         const isRareShiny = fullText.includes("✨") && fullText.includes("these colors seem unusual");
         const isShiny = fullText.includes("✨") && !isRareShiny;
 
-        // Get or create user
         let user = await storage.getUser(catchUserId);
         if (!user) {
           user = await storage.createUser({
@@ -275,7 +251,6 @@ export function startDiscordBot() {
           });
         }
 
-        // Increment catch count based on type
         if (isRareShiny) {
           await storage.incrementUserRareShinyCatches(catchUserId);
           await message.react("💎");
@@ -295,17 +270,14 @@ export function startDiscordBot() {
       return;
     }
 
-    // Ignore other bot messages
     if (message.author.bot) return;
 
     try {
-      // Handle commands with prefix
       if (content.startsWith(PREFIX)) {
         await handleCommand(message);
         return;
       }
 
-      // Handle -payed special case
       if (content.startsWith("-payed")) {
         await handlePayedCommand(message);
         return;
@@ -313,16 +285,13 @@ export function startDiscordBot() {
 
       console.log(`[MESSAGE] Received from ${username} in channel ${channelId}: "${content.substring(0, 50)}..."`);
 
-      // Get settings first
       const settings = await storage.getBotSettings();
 
-      // Check if message event is active
       if (!settings.messageEventActive) {
         console.log(`[MESSAGE] Message event inactive - not saving or counting`);
         return;
       }
 
-      // Check if we should count this channel
       const shouldCount = settings.countingChannels.includes(channelId);
 
       console.log(`[MESSAGE] Should count: ${shouldCount}, Counting channels:`, settings.countingChannels);
@@ -332,7 +301,6 @@ export function startDiscordBot() {
         return;
       }
 
-      // Save message with spam check
       const { message: savedMessage, spam } = await storage.createMessageWithSpamCheck(
         content,
         userId,
@@ -340,18 +308,15 @@ export function startDiscordBot() {
         false
       );
 
-      // Get or create user
       let user = await storage.getUser(userId);
       if (!user) {
         user = await storage.createUser({ id: userId, username, discriminator });
       }
 
-      // Only increment if not spam
       if (!spam.blocked) {
         console.log(`[MESSAGE] Valid message - counting for ${username}`);
         await storage.incrementUserMessages(userId, channelId);
       } else {
-        // Mark spam with emoji only
         console.log(`[MESSAGE] Spam detected: ${spam.reason}`);
         await message.react("💣");
       }
@@ -360,12 +325,10 @@ export function startDiscordBot() {
     }
   });
 
-  async function handlePayedCommand(message: Message) {
+  async function handlePayedCommand(message) {
     try {
       const settings = await storage.getBotSettings();
 
-      // -payed must be used in the WITHDRAWAL channel
-      // Clean both IDs for comparison
       const currentChannelId = message.channel.id;
       const cleanWithdrawalChannelId = settings.withdrawalChannelId?.replace(/[<#>]/g, '') || '';
       
@@ -391,7 +354,6 @@ export function startDiscordBot() {
         return;
       }
 
-      // Get withdrawal request
       const request = await storage.getWithdrawalRequestByNumber(requestNumber);
 
       if (!request) {
@@ -404,7 +366,6 @@ export function startDiscordBot() {
         return;
       }
 
-      // Get user info
       const user = await storage.getUser(request.userId);
 
       if (!user) {
@@ -412,30 +373,24 @@ export function startDiscordBot() {
         return;
       }
 
-      // Check if user has sufficient balance
       if (user.pokecoins < request.amount) {
         await message.reply(`❌ User <@${request.userId}> has insufficient balance! They have **${user.pokecoins}** Pokecoins but request is for **${request.amount}** Pokecoins.\n\n⚠️ This withdrawal request cannot be completed.`);
         return;
       }
 
-      // First, deduct the pokecoins - this validates the balance
       const updatedUser = await storage.deductUserPokecoins(request.userId, request.amount);
 
-      // Only after successful deduction, mark the request as completed
       const completionResult = await storage.completeWithdrawalIfPending(requestNumber);
 
       if (!completionResult.success) {
-        // Request was already processed - refund the coins
         await storage.addUserPokecoins(request.userId, request.amount);
         await message.reply(`❌ Withdrawal request #${requestNumber} has already been processed. Coins have been refunded.`);
         return;
       }
 
-      // Send confirmation in withdrawal channel
       await message.react("✅");
       await message.reply(`✅ Payment processed for request #${requestNumber}. Proof sent to proofs channel.`);
 
-      // Send detailed proof to the PROOFS channel
       if (!settings.proofsChannelId) {
         console.error("[PAYMENT] Proofs channel not configured");
         return;
@@ -478,7 +433,7 @@ export function startDiscordBot() {
     }
   }
 
-  async function handleCommand(message: Message) {
+  async function handleCommand(message) {
     const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
     const command = args[0].toLowerCase();
     const userId = message.author.id;
@@ -531,92 +486,105 @@ export function startDiscordBot() {
           await message.reply({ embeds: [catchesEmbed] });
           break;
 
-        case "leaderboard":
-        case "lb":
-          const lbType = args[1]?.toLowerCase();
-          const users = await storage.getAllUsers();
-
-          if (users.length === 0) {
-            await message.reply("📊 No users yet!");
-            return;
-          }
-
-          if (lbType === "catches") {
-            // Catches Leaderboard
-            const sortedByCatches = users.sort((a, b) => b.catches - a.catches).slice(0, 10);
-            const totalCatches = users.reduce((sum, u) => sum + u.catches, 0);
-
-            const catchesDescription = sortedByCatches
-              .map((u, i) => {
-                const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `**#${i + 1}**`;
-                return `${medal} <@${u.id}>\n🕸️ **${u.catches}** catches | 🪙 ${u.pokecoins} coins`;
-              })
-              .join("\n\n");
-
-            const catchesEmbed = new EmbedBuilder()
-              .setColor(0xFF6B6B)
-              .setTitle("🕸️ Catches Leaderboard")
-              .setDescription(catchesDescription || "No catches yet!")
-              .addFields(
-                { name: "📈 Total Catches", value: `${totalCatches}`, inline: true },
-                { name: "👥 Active Users", value: `${users.length}`, inline: true }
-              )
-              .setFooter({ text: "Keep catching to climb the ranks!" })
-              .setTimestamp();
-
-            await message.reply({ embeds: [catchesEmbed] });
-          } else if (lbType === "messages") {
-            // Messages Leaderboard
-            const sortedByMessages = users.sort((a, b) => b.messages - a.messages).slice(0, 10);
-            const totalMessages = users.reduce((sum, u) => sum + u.messages, 0);
-
-            const messagesDescription = sortedByMessages
-              .map((u, i) => {
-                const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `**#${i + 1}**`;
-                return `${medal} <@${u.id}>\n💬 **${u.messages}** messages | 🪙 ${u.pokecoins} coins`;
-              })
-              .join("\n\n");
-
-            const messagesEmbed = new EmbedBuilder()
-              .setColor(0x4CAF50)
-              .setTitle("💬 Messages Leaderboard")
-              .setDescription(messagesDescription || "No messages yet!")
-              .addFields(
-                { name: "📈 Total Messages", value: `${totalMessages}`, inline: true },
-                { name: "👥 Active Users", value: `${users.length}`, inline: true }
-              )
-              .setFooter({ text: "Keep chatting to earn more rewards!" })
-              .setTimestamp();
-
-            await message.reply({ embeds: [messagesEmbed] });
-          } else {
-            await message.reply("Please specify leaderboard type: `Dlb messages` or `Dlb catches`");
-          }
-          break;
-
         case "profile":
-          let user = await storage.getUser(userId);
-          if (!user) {
-            user = await storage.createUser({ id: userId, username, discriminator });
+          let profileUser = await storage.getUser(userId);
+          if (!profileUser) {
+            profileUser = await storage.createUser({ id: userId, username, discriminator });
           }
 
           const allUsers = await storage.getAllUsers();
-          const messageRank = allUsers.sort((a, b) => b.messages - a.messages).findIndex(u => u.id === userId) + 1;
-          const catchRank = allUsers.sort((a, b) => b.catches - a.catches).findIndex(u => u.id === userId) + 1;
+          const messageRankPosition = allUsers.sort((a, b) => b.messages - a.messages).findIndex(u => u.id === userId) + 1;
+          const catchRankPos = allUsers.sort((a, b) => b.catches - a.catches).findIndex(u => u.id === userId) + 1;
 
           const profileEmbed = new EmbedBuilder()
-            .setColor(0x9B59B6)
-            .setTitle(`📊 ${username}'s Profile`)
+            .setColor(0x5865F2)
+            .setTitle(`👤 ${username}'s Profile`)
             .setThumbnail(message.author.displayAvatarURL())
             .addFields(
-              { name: "💬 Messages", value: `**${user.messages}**\nRank: #${messageRank}`, inline: true },
-              { name: "🕸️ Catches", value: `**${user.catches}**\nRank: #${catchRank}`, inline: true },
-              { name: "🪙 Pokecoins", value: `**${user.pokecoins}**`, inline: true }
+              { name: "💬 Messages", value: `${profileUser.messages}`, inline: true },
+              { name: "🕸️ Catches", value: `${profileUser.catches}`, inline: true },
+              { name: "🪙 Pokecoins", value: `${profileUser.pokecoins}`, inline: true },
+              { name: "📊 Message Rank", value: `#${messageRankPosition}`, inline: true },
+              { name: "🎖️ Catch Rank", value: `#${catchRankPos}`, inline: true },
+              { name: "✨ Shiny Count", value: `${profileUser.shinyCatches || 0}`, inline: true }
             )
-            .setFooter({ text: `User ID: ${userId}` })
+            .setFooter({ text: "Keep grinding to reach the top!" })
             .setTimestamp();
 
           await message.reply({ embeds: [profileEmbed] });
+          break;
+
+        case "leaderboard":
+        case "lb":
+          const leaderboardType = args[1]?.toLowerCase() || "messages";
+          const allLbUsers = await storage.getAllUsers();
+
+          if (leaderboardType === "messages") {
+            const messageLeaderboard = allLbUsers.sort((a, b) => b.messages - a.messages).slice(0, 10);
+            const messageText = messageLeaderboard.map((u, i) => `**${i + 1}.** <@${u.id}> - ${u.messages} messages`).join('\n');
+
+            const messageLbEmbed = new EmbedBuilder()
+              .setColor(0x00AA00)
+              .setTitle("💬 Message Leaderboard")
+              .setDescription(messageText)
+              .setFooter({ text: "Top 10 message senders" })
+              .setTimestamp();
+
+            await message.reply({ embeds: [messageLbEmbed] });
+          } else if (leaderboardType === "catches") {
+            const catchLeaderboard = allLbUsers.sort((a, b) => b.catches - a.catches).slice(0, 10);
+            const catchText = catchLeaderboard.map((u, i) => `**${i + 1}.** <@${u.id}> - ${u.catches} catches`).join('\n');
+
+            const catchLbEmbed = new EmbedBuilder()
+              .setColor(0xFF6B6B)
+              .setTitle("🕸️ Catch Leaderboard")
+              .setDescription(catchText)
+              .setFooter({ text: "Top 10 catchers" })
+              .setTimestamp();
+
+            await message.reply({ embeds: [catchLbEmbed] });
+          }
+          break;
+
+        case "withdraw":
+          const withdrawAmount = parseInt(args[1]);
+
+          if (isNaN(withdrawAmount) || withdrawAmount <= 0) {
+            await message.reply("❌ Please provide a valid withdrawal amount. Usage: `Dwithdraw [amount]`");
+            return;
+          }
+
+          let withdrawUser = await storage.getUser(userId);
+          if (!withdrawUser) {
+            withdrawUser = await storage.createUser({ id: userId, username, discriminator });
+          }
+
+          if (withdrawUser.pokecoins < withdrawAmount) {
+            await message.reply(`❌ You don't have enough Pokecoins! You have **${withdrawUser.pokecoins}** but requested **${withdrawAmount}**.`);
+            return;
+          }
+
+          pendingWithdrawals.set(userId, withdrawAmount);
+
+          const withdrawEmbed = new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle("💰 Withdrawal Request")
+            .setDescription(`You're about to withdraw **${withdrawAmount}** Pokecoins`)
+            .addFields(
+              { name: "🪙 Amount", value: `${withdrawAmount}`, inline: true },
+              { name: "💼 Your Balance", value: `${withdrawUser.pokecoins}`, inline: true }
+            )
+            .setFooter({ text: "Click the button below to proceed and enter your Market ID" })
+            .setTimestamp();
+
+          const withdrawButton = new ButtonBuilder()
+            .setCustomId(`withdraw_${userId}`)
+            .setLabel("Confirm Withdrawal")
+            .setStyle(ButtonStyle.Success);
+
+          const row = new ActionRowBuilder().addComponents(withdrawButton);
+
+          await message.reply({ embeds: [withdrawEmbed], components: [row] });
           break;
 
         case "event":
@@ -625,144 +593,44 @@ export function startDiscordBot() {
             return;
           }
 
-          const eventType = args[1]?.toLowerCase();
-          const state = args[2]?.toLowerCase();
+          const settings = await storage.getBotSettings();
 
-          if (!eventType || !state) {
-            const settings = await storage.getBotSettings();
-            const statusEmbed = new EmbedBuilder()
+          if (!args[1]) {
+            const eventStatusEmbed = new EmbedBuilder()
               .setColor(0x5865F2)
-              .setTitle("📊 Event Status")
+              .setTitle("⚙️ Event Status")
               .addFields(
-                { name: "💬 Messages Event", value: settings.messageEventActive ? "✅ Active" : "🛑 Inactive", inline: true },
-                { name: "🕸️ Catches Event", value: settings.catchEventActive ? "✅ Active" : "🛑 Inactive", inline: true }
+                { name: "💬 Messages Event", value: settings.messageEventActive ? "✅ ON" : "❌ OFF", inline: true },
+                { name: "🕸️ Catch Event", value: settings.catchEventActive ? "✅ ON" : "❌ OFF", inline: true }
               )
-              .setFooter({ text: "Usage: Devent [messages/catches] [on/off]" })
+              .setFooter({ text: "Use Devent [messages/catches] [on/off] to toggle" })
               .setTimestamp();
-            await message.reply({ embeds: [statusEmbed] });
+
+            await message.reply({ embeds: [eventStatusEmbed] });
             return;
           }
 
-          if (eventType === "messages" || eventType === "message") {
-            if (state === "on") {
-              await storage.updateMessageEventStatus(true);
-              const eventEmbed = new EmbedBuilder()
-                .setColor(0x00FF00)
-                .setTitle("✅ Messages Event Activated")
-                .setDescription("Users can now earn rewards from messages!")
-                .setTimestamp();
-              await message.reply({ embeds: [eventEmbed] });
-            } else if (state === "off") {
-              await storage.updateMessageEventStatus(false);
-              const eventEmbed = new EmbedBuilder()
-                .setColor(0xFF0000)
-                .setTitle("🛑 Messages Event Deactivated")
-                .setDescription("Message rewards are paused.")
-                .setTimestamp();
-              await message.reply({ embeds: [eventEmbed] });
-            } else {
-              await message.reply("Usage: `Devent messages on` or `Devent messages off`");
-            }
-          } else if (eventType === "catches" || eventType === "catch") {
-            if (state === "on") {
-              await storage.updateCatchEventStatus(true);
-              const eventEmbed = new EmbedBuilder()
-                .setColor(0x00FF00)
-                .setTitle("✅ Catches Event Activated")
-                .setDescription("Catches will now be counted!")
-                .setTimestamp();
-              await message.reply({ embeds: [eventEmbed] });
-            } else if (state === "off") {
-              await storage.updateCatchEventStatus(false);
-              const eventEmbed = new EmbedBuilder()
-                .setColor(0xFF0000)
-                .setTitle("🛑 Catches Event Deactivated")
-                .setDescription("Catches will not be counted.")
-                .setTimestamp();
-              await message.reply({ embeds: [eventEmbed] });
-            } else {
-              await message.reply("Usage: `Devent catches on` or `Devent catches off`");
-            }
+          const eventType = args[1].toLowerCase();
+          const eventStatus = args[2]?.toLowerCase();
+
+          if (!["messages", "catches"].includes(eventType)) {
+            await message.reply("❌ Invalid event type. Use `messages` or `catches`.");
+            return;
+          }
+
+          if (!["on", "off"].includes(eventStatus)) {
+            await message.reply("❌ Invalid status. Use `on` or `off`.");
+            return;
+          }
+
+          const isActive = eventStatus === "on";
+
+          if (eventType === "messages") {
+            await storage.updateMessageEventStatus(isActive);
+            await message.reply(`✅ Message event is now **${isActive ? "ON" : "OFF"}**`);
           } else {
-            await message.reply("Usage: `Devent [messages/catches] [on/off]`");
-          }
-          break;
-
-        case "reset":
-          if (userId !== ADMIN_ID) {
-            await message.reply("❌ You do not have permission to use this command.");
-            return;
-          }
-
-          const targetType = args[1]?.toLowerCase();
-          const targetUser = args[2];
-
-          if (!["messages", "catches", "all"].includes(targetType)) {
-            await message.reply("Usage: `Dreset [messages/catches/all] [user_id/all]`");
-            return;
-          }
-
-          if (targetUser === "all") {
-            await storage.resetAllUserStats(targetType as any);
-            await message.reply(`✅ Reset **${targetType}** for **all users**.`);
-          } else if (targetUser) {
-            await storage.resetUserStats(targetUser, targetType as any);
-            await message.reply(`✅ Reset **${targetType}** for <@${targetUser}>.`);
-          } else {
-            await message.reply("Please specify a user ID or 'all'");
-          }
-          break;
-
-        case "resetbal":
-          if (userId !== ADMIN_ID) {
-            await message.reply("❌ You do not have permission to use this command.");
-            return;
-          }
-
-          const balTargetUser = args[1]?.trim();
-          const balAmountStr = args[2]?.trim();
-
-          if (!balTargetUser || !balAmountStr) {
-            await message.reply("Usage: `Dresetbal [user_id] [amount]`\nExample: `Dresetbal 123456789 0` (reset to 0)\nExample: `Dresetbal 123456789 1000` (set to 1000)");
-            return;
-          }
-
-          const balAmount = parseInt(balAmountStr, 10);
-
-          if (isNaN(balAmount)) {
-            await message.reply("❌ Amount must be a valid number.");
-            return;
-          }
-
-          if (balAmount < 0) {
-            await message.reply("❌ Amount must be 0 or greater.");
-            return;
-          }
-
-          try {
-            const balUser = await storage.getUser(balTargetUser);
-            if (!balUser) {
-              await message.reply(`❌ User <@${balTargetUser}> not found.`);
-              return;
-            }
-
-            const oldBalance = balUser.pokecoins;
-            await storage.setUserPokecoins(balTargetUser, balAmount);
-            
-            const balEmbed = new EmbedBuilder()
-              .setColor(0x00FF00)
-              .setTitle("✅ Balance Reset")
-              .setDescription(`Successfully updated balance for <@${balTargetUser}>`)
-              .addFields(
-                { name: "👤 User", value: `<@${balTargetUser}>`, inline: true },
-                { name: "💰 Old Balance", value: `${oldBalance} Pokecoins`, inline: true },
-                { name: "💰 New Balance", value: `${balAmount} Pokecoins`, inline: true }
-              )
-              .setTimestamp();
-            
-            await message.reply({ embeds: [balEmbed] });
-          } catch (balError) {
-            await message.reply(`❌ Failed to reset balance: ${balError instanceof Error ? balError.message : "Unknown error"}`);
+            await storage.updateCatchEventStatus(isActive);
+            await message.reply(`✅ Catch event is now **${isActive ? "ON" : "OFF"}**`);
           }
           break;
 
@@ -772,88 +640,70 @@ export function startDiscordBot() {
             return;
           }
 
-          const messagesCount = parseInt(args[1]);
-          const coinsAmount = parseInt(args[2]);
+          const messagesPerReward = parseInt(args[1]);
+          const coinAmount = parseInt(args[2]);
 
-          if (isNaN(messagesCount) || isNaN(coinsAmount)) {
-            await message.reply("Usage: `Drate [messages] [coins]`\nExample: `Drate 50 50000` (every 50 messages = 50000 coins)");
+          if (isNaN(messagesPerReward) || isNaN(coinAmount)) {
+            await message.reply("❌ Invalid parameters. Usage: `Drate [messages] [coins]`");
             return;
           }
 
-          await storage.updateMessagesPerReward(messagesCount);
-          await storage.updatePokecoinRate(coinsAmount);
-          await message.reply(`✅ Rate updated: Every **${messagesCount}** messages = **${coinsAmount}** Pokecoins`);
+          await storage.updateMessagesPerReward(messagesPerReward);
+          await storage.updatePokecoinRate(coinAmount);
+          await message.reply(`✅ Reward rate updated: **${coinAmount}** coins per **${messagesPerReward}** messages`);
           break;
 
-        case "withdraw":
-          try {
-            const amount = parseInt(args[1]);
-
-            if (!amount || isNaN(amount)) {
-              const withdrawEmbed = new EmbedBuilder()
-                .setColor(0xFFD700)
-                .setTitle("💰 Withdrawal Request")
-                .setDescription("Please specify the amount of Pokecoins to withdraw")
-                .addFields(
-                  { name: "📝 How to use", value: "`Dwithdraw [amount]`", inline: false },
-                  { name: "📌 Example", value: "`Dwithdraw 30000`", inline: false },
-                  { name: "💡 Next Step", value: "Click the button below to enter your Market ID", inline: false }
-                )
-                .setFooter({ text: "Make sure you have enough Pokecoins!" })
-                .setTimestamp();
-
-              await message.reply({ embeds: [withdrawEmbed] });
-              return;
-            }
-
-            let withdrawUser = await storage.getUser(userId);
-            if (!withdrawUser) {
-              withdrawUser = await storage.createUser({ id: userId, username, discriminator });
-            }
-
-            // Check if user has enough pokecoins
-            if (withdrawUser.pokecoins <= 0) {
-              await message.reply("❌ You don't have any Pokecoins to withdraw!");
-              return;
-            }
-
-            if (amount > withdrawUser.pokecoins) {
-              await message.reply(`❌ You don't have enough Pokecoins! You have **${withdrawUser.pokecoins}** Pokecoins but tried to withdraw **${amount}** Pokecoins.`);
-              return;
-            }
-
-            if (amount <= 0) {
-              await message.reply("❌ Withdrawal amount must be greater than 0!");
-              return;
-            }
-
-            // Store the pending withdrawal amount
-            pendingWithdrawals.set(userId, amount);
-
-            // Create a button for the user to click
-            const button = new ButtonBuilder()
-              .setCustomId(`withdraw_${userId}`)
-              .setLabel("📝 Enter Market ID")
-              .setStyle(ButtonStyle.Primary);
-
-            const row = new ActionRowBuilder<ButtonBuilder>()
-              .addComponents(button);
-
-            const buttonEmbed = new EmbedBuilder()
-              .setColor(0x5865F2)
-              .setTitle("💰 Withdrawal Request")
-              .setDescription(`You are withdrawing **${amount}** Pokecoins.\n\n**Current Balance:** ${withdrawUser.pokecoins} Pokecoins\n**After Withdrawal:** ${withdrawUser.pokecoins - amount} Pokecoins`)
-              .addFields(
-                { name: "📋 Next Step", value: "Click the button below to enter your Market ID", inline: false }
-              )
-              .setFooter({ text: "Button will expire in 5 minutes" })
-              .setTimestamp();
-
-            await message.reply({ embeds: [buttonEmbed], components: [row] });
-          } catch (withdrawError) {
-            console.error("[WITHDRAW] Error processing withdrawal:", withdrawError);
-            await message.reply("❌ Failed to process withdrawal request. Please try again or contact an admin.");
+        case "reset":
+          if (userId !== ADMIN_ID) {
+            await message.reply("❌ You do not have permission to use this command.");
+            return;
           }
+
+          const resetType = args[1]?.toLowerCase();
+          const resetTarget = args[2];
+
+          if (!["messages", "catches", "all"].includes(resetType)) {
+            await message.reply("❌ Invalid reset type. Use `messages`, `catches`, or `all`.");
+            return;
+          }
+
+          if (resetTarget === "all") {
+            await storage.resetAllUserStats(resetType);
+            await message.reply(`✅ All user **${resetType}** stats have been reset`);
+          } else {
+            const resetUser = await storage.getUser(resetTarget);
+            if (!resetUser) {
+              await message.reply(`❌ User with ID **${resetTarget}** not found.`);
+              return;
+            }
+
+            await storage.resetUserStats(resetTarget, resetType);
+            await message.reply(`✅ Reset **${resetType}** stats for <@${resetTarget}>`);
+          }
+          break;
+
+        case "resetbal":
+          if (userId !== ADMIN_ID) {
+            await message.reply("❌ You do not have permission to use this command.");
+            return;
+          }
+
+          const targetUserId = args[1];
+          const newBalance = parseInt(args[2]);
+
+          if (!targetUserId || isNaN(newBalance)) {
+            await message.reply("❌ Invalid parameters. Usage: `Dresetbal [user_id] [amount]`");
+            return;
+          }
+
+          let targetUser = await storage.getUser(targetUserId);
+          if (!targetUser) {
+            await message.reply(`❌ User with ID **${targetUserId}** not found.`);
+            return;
+          }
+
+          await storage.setUserPokecoins(targetUserId, newBalance);
+          await message.reply(`✅ Set balance for <@${targetUserId}> to **${newBalance}** Pokecoins`);
           break;
 
         case "setproofs":
@@ -862,34 +712,26 @@ export function startDiscordBot() {
             return;
           }
 
-          const proofsChannelId = args[1];
+          const proofsChannelId = args[1]?.replace(/[<#>]/g, '');
+
           if (!proofsChannelId) {
-            await message.reply("Usage: `Dsetproofs [channel_id]`\nExample: `Dsetproofs 123456789` or mention the channel");
+            await message.reply("❌ Please provide a channel ID. Usage: `Dsetproofs [channel_id]`");
             return;
           }
 
-          // Clean the channel ID (remove <#> if present) and validate
-          const cleanProofsChannelId = proofsChannelId.replace(/[<#>]/g, '');
-          
-          if (!/^\d+$/.test(cleanProofsChannelId)) {
-            await message.reply("❌ Invalid channel ID. Please provide a valid channel ID (numeric) or mention the channel.");
-            return;
-          }
-
-          // Verify the channel exists and is text-based
           try {
-            const testProofsChannel = await message.client.channels.fetch(cleanProofsChannelId);
-            if (!testProofsChannel || !testProofsChannel.isTextBased()) {
-              await message.reply("❌ Channel not found or is not a text channel. Please provide a valid text channel.");
+            const testChannel = await message.client.channels.fetch(proofsChannelId);
+            if (!testChannel || !testChannel.isTextBased()) {
+              await message.reply("❌ Invalid channel. Please provide a valid text channel ID.");
               return;
             }
-          } catch (proofsError) {
-            await message.reply("❌ Could not fetch channel. Please verify the channel ID is correct and the bot has access to it.");
+          } catch (error) {
+            await message.reply("❌ Channel not found or not accessible. Please check the channel ID.");
             return;
           }
 
-          await storage.setProofsChannel(cleanProofsChannelId);
-          await message.reply(`✅ Proofs channel set to <#${cleanProofsChannelId}>`);
+          await storage.setProofsChannel(proofsChannelId);
+          await message.reply(`✅ Proofs channel set to <#${proofsChannelId}>`);
           break;
 
         case "setwithdrawal":
@@ -898,34 +740,26 @@ export function startDiscordBot() {
             return;
           }
 
-          const withdrawalChannelId = args[1];
+          const withdrawalChannelId = args[1]?.replace(/[<#>]/g, '');
+
           if (!withdrawalChannelId) {
-            await message.reply("Usage: `Dsetwithdrawal [channel_id]`\nExample: `Dsetwithdrawal 123456789` or mention the channel");
+            await message.reply("❌ Please provide a channel ID. Usage: `Dsetwithdrawal [channel_id]`");
             return;
           }
 
-          // Clean the channel ID (remove <#> if present) and validate
-          const cleanWithdrawalChannelId = withdrawalChannelId.replace(/[<#>]/g, '');
-          
-          if (!/^\d+$/.test(cleanWithdrawalChannelId)) {
-            await message.reply("❌ Invalid channel ID. Please provide a valid channel ID (numeric) or mention the channel.");
-            return;
-          }
-
-          // Verify the channel exists and is text-based
           try {
-            const testChannel = await message.client.channels.fetch(cleanWithdrawalChannelId);
-            if (!testChannel || !testChannel.isTextBased()) {
-              await message.reply("❌ Channel not found or is not a text channel. Please provide a valid text channel.");
+            const testWithdrawalChannel = await message.client.channels.fetch(withdrawalChannelId);
+            if (!testWithdrawalChannel || !testWithdrawalChannel.isTextBased()) {
+              await message.reply("❌ Invalid channel. Please provide a valid text channel ID.");
               return;
             }
-          } catch (channelError) {
-            await message.reply("❌ Could not fetch channel. Please verify the channel ID is correct and the bot has access to it.");
+          } catch (error) {
+            await message.reply("❌ Channel not found or not accessible. Please check the channel ID.");
             return;
           }
 
-          await storage.setWithdrawalChannel(cleanWithdrawalChannelId);
-          await message.reply(`✅ Withdrawal channel set to <#${cleanWithdrawalChannelId}>`);
+          await storage.setWithdrawalChannel(withdrawalChannelId);
+          await message.reply(`✅ Withdrawal channel set to <#${withdrawalChannelId}>`);
           break;
 
         case "addcounting":
@@ -934,23 +768,26 @@ export function startDiscordBot() {
             return;
           }
 
-          const countingChannelId = args[1];
-          if (!countingChannelId) {
-            await message.reply("Usage: `Daddcounting [channel_id]`\nExample: `Daddcounting 123456789`");
+          const addChannelId = args[1]?.replace(/[<#>]/g, '');
+
+          if (!addChannelId) {
+            await message.reply("❌ Please provide a channel ID. Usage: `Daddcounting [channel_id]`");
             return;
           }
 
-          // Clean the channel ID (remove <#> if present)
-          const cleanChannelId = countingChannelId.replace(/[<#>]/g, '');
-          
-          // Validate that it's a valid snowflake ID (Discord IDs are numeric strings)
-          if (!/^\d+$/.test(cleanChannelId)) {
-            await message.reply("❌ Invalid channel ID. Please provide a valid channel ID or mention.");
+          try {
+            const testAddChannel = await message.client.channels.fetch(addChannelId);
+            if (!testAddChannel || !testAddChannel.isTextBased()) {
+              await message.reply("❌ Invalid channel. Please provide a valid text channel ID.");
+              return;
+            }
+          } catch (error) {
+            await message.reply("❌ Channel not found or not accessible. Please check the channel ID.");
             return;
           }
 
-          await storage.addCountingChannel(cleanChannelId);
-          await message.reply(`✅ Added <#${cleanChannelId}> to counting channels`);
+          await storage.addCountingChannel(addChannelId);
+          await message.reply(`✅ Added <#${addChannelId}> to counting channels`);
           break;
 
         case "removecounting":
@@ -959,23 +796,15 @@ export function startDiscordBot() {
             return;
           }
 
-          const removeChannelId = args[1];
+          const removeChannelId = args[1]?.replace(/[<#>]/g, '');
+
           if (!removeChannelId) {
-            await message.reply("Usage: `Dremovecounting [channel_id]`\nExample: `Dremovecounting 123456789`");
+            await message.reply("❌ Please provide a channel ID. Usage: `Dremovecounting [channel_id]`");
             return;
           }
 
-          // Clean the channel ID (remove <#> if present)
-          const cleanRemoveChannelId = removeChannelId.replace(/[<#>]/g, '');
-          
-          // Validate that it's a valid snowflake ID
-          if (!/^\d+$/.test(cleanRemoveChannelId)) {
-            await message.reply("❌ Invalid channel ID. Please provide a valid channel ID or mention.");
-            return;
-          }
-
-          await storage.removeCountingChannel(cleanRemoveChannelId);
-          await message.reply(`✅ Removed <#${cleanRemoveChannelId}> from counting channels`);
+          await storage.removeCountingChannel(removeChannelId);
+          await message.reply(`✅ Removed <#${removeChannelId}> from counting channels`);
           break;
 
         case "channels":
@@ -986,7 +815,6 @@ export function startDiscordBot() {
 
           const currentSettings = await storage.getBotSettings();
           
-          // Clean all channel IDs before displaying
           const cleanProofsId = currentSettings.proofsChannelId?.replace(/[<#>]/g, '') || '';
           const cleanWithdrawalId = currentSettings.withdrawalChannelId?.replace(/[<#>]/g, '') || '';
           const cleanCountingIds = currentSettings.countingChannels.map(id => id.replace(/[<#>]/g, ''));
@@ -1010,7 +838,6 @@ export function startDiscordBot() {
           break;
 
         default:
-          // Unknown command - ignore silently
           break;
       }
     } catch (error) {

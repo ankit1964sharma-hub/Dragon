@@ -1,7 +1,6 @@
-import type { Express } from "express";
-import { storage } from "./storage";
+import { storage } from "./storage.js";
 
-export function registerRoutes(app: Express) {
+export function registerRoutes(app) {
   // Get all users with their stats
   app.get("/api/users", async (_req, res) => {
     try {

@@ -7,15 +7,7 @@ import {
   botSettings,
   messages,
   withdrawalRequests,
-  type User,
-  type InsertUser,
-  type BotSettings,
-  type InsertBotSettings,
-  type Message,
-  type InsertMessage,
-  type WithdrawalRequest,
-  type InsertWithdrawalRequest
-} from "@shared/schema";
+} from "../shared/schema.js";
 
 neonConfig.webSocketConstructor = ws;
 
@@ -28,78 +20,32 @@ if (!process.env.DATABASE_URL) {
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const db = drizzle({ client: pool });
 
-export interface IStorage {
-  // User operations
-  getUser(id: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
-  getAllUsers(): Promise<User[]>;
-  incrementUserMessages(userId: string, channelId: string): Promise<User>;
-  incrementUserCatches(userId: string): Promise<User>;
-  incrementUserShinyCatches(userId: string): Promise<User>;
-  incrementUserRareShinyCatches(userId: string): Promise<User>;
-  addUserPokecoins(userId: string, amount: number): Promise<User>;
-  deductUserPokecoins(userId: string, amount: number): Promise<User>;
-  setUserPokecoins(userId: string, amount: number): Promise<User>;
-  resetUserStats(userId: string, type: "messages" | "catches" | "all"): Promise<User>;
-  resetAllUserStats(type: "messages" | "catches" | "all"): Promise<void>;
-
-  // Bot settings operations
-  getBotSettings(): Promise<BotSettings>;
-  updateMessageEventStatus(active: boolean): Promise<BotSettings>;
-  updateCatchEventStatus(active: boolean): Promise<BotSettings>;
-  updatePokecoinRate(rate: number): Promise<BotSettings>;
-  updateMessagesPerReward(count: number): Promise<BotSettings>;
-  updateCountingChannels(channels: string[]): Promise<BotSettings>;
-  updateProofsChannel(channelId: string): Promise<BotSettings>;
-  updateAntiSpamSettings(enabled: boolean, timeWindow: number, maxMessages: number, minLength: number): Promise<BotSettings>;
-  setProofsChannel(channelId: string): Promise<void>;
-  setWithdrawalChannel(channelId: string): Promise<void>;
-  addCountingChannel(channelId: string): Promise<void>;
-  removeCountingChannel(channelId: string): Promise<void>;
-
-  // Message operations
-  createMessageWithSpamCheck(content: string, authorId: string, channelId: string, isBot: boolean): Promise<{ message: Message; spam: { blocked: boolean; reason?: string } }>;
-  getMessagesByChannel(channelId: string, limit?: number): Promise<Message[]>;
-  getAllMessages(limit?: number): Promise<Message[]>;
-  getRecentMessagesByUser(userId: string, seconds: number): Promise<Message[]>;
-  checkIsSpam(userId: string, content: string, channelId: string): Promise<{ isSpam: boolean; reason?: string }>;
-
-  // Withdrawal operations
-  createWithdrawalRequest(request: InsertWithdrawalRequest): Promise<WithdrawalRequest>;
-  getWithdrawalRequestByNumber(requestNumber: number): Promise<WithdrawalRequest | undefined>;
-  getWithdrawalRequestsCount(): Promise<number>;
-  updateWithdrawalRequestStatus(requestNumber: number, status: string): Promise<WithdrawalRequest>;
-  completeWithdrawalIfPending(requestNumber: number): Promise<{ success: boolean; request?: WithdrawalRequest }>;
-}
-
-export class DatabaseStorage implements IStorage {
-  async getUser(id: string): Promise<User | undefined> {
+export class DatabaseStorage {
+  async getUser(id) {
     const result = await db.select().from(users).where(eq(users.id, id));
     return result[0];
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
+  async createUser(insertUser) {
     const result = await db.insert(users).values(insertUser).returning();
     return result[0];
   }
 
-  async getAllUsers(): Promise<User[]> {
+  async getAllUsers() {
     return await db.select().from(users);
   }
 
-  async checkIsSpam(userId: string, content: string, channelId: string): Promise<{ isSpam: boolean; reason?: string }> {
+  async checkIsSpam(userId, content, channelId) {
     const settings = await this.getBotSettings();
 
     if (!settings.antiSpamEnabled) {
       return { isSpam: false };
     }
 
-    // Check minimum message length
     if (content.trim().length < settings.minMessageLength) {
       return { isSpam: true, reason: "Message too short" };
     }
 
-    // Check if user is sending too many messages in time window
     const recentMessages = await this.getRecentMessagesByUser(userId, settings.spamTimeWindow);
 
     if (recentMessages.length >= settings.maxMessagesInWindow) {
@@ -109,7 +55,7 @@ export class DatabaseStorage implements IStorage {
     return { isSpam: false };
   }
 
-  async getRecentMessagesByUser(userId: string, seconds: number): Promise<Message[]> {
+  async getRecentMessagesByUser(userId, seconds) {
     const timeThreshold = new Date(Date.now() - seconds * 1000);
 
     const result = await db
@@ -127,8 +73,7 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async incrementUserMessages(userId: string, channelId: string): Promise<User> {
-    // Get or create user
+  async incrementUserMessages(userId, channelId) {
     let user = await this.getUser(userId);
     if (!user) {
       user = await this.createUser({
@@ -138,7 +83,6 @@ export class DatabaseStorage implements IStorage {
       });
     }
 
-    // Check if event is active and channel is counting
     const settings = await this.getBotSettings();
 
     console.log(`[MESSAGE COUNT] User: ${userId}, Channel: ${channelId}`);
@@ -159,7 +103,6 @@ export class DatabaseStorage implements IStorage {
     const newMessages = user.messages + 1;
     let newPokecoins = user.pokecoins;
 
-    // Award pokecoins based on messagesPerReward setting
     if (newMessages % settings.messagesPerReward === 0) {
       newPokecoins += settings.pokecoinRate;
       console.log(`[MESSAGE COUNT] Awarded ${settings.pokecoinRate} pokecoins! Total: ${newPokecoins}`);
@@ -176,7 +119,7 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async incrementUserCatches(userId: string): Promise<User> {
+  async incrementUserCatches(userId) {
     let user = await this.getUser(userId);
     if (!user) {
       user = await this.createUser({
@@ -195,7 +138,7 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async incrementUserShinyCatches(userId: string): Promise<User> {
+  async incrementUserShinyCatches(userId) {
     let user = await this.getUser(userId);
     if (!user) {
       user = await this.createUser({
@@ -217,7 +160,7 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async incrementUserRareShinyCatches(userId: string): Promise<User> {
+  async incrementUserRareShinyCatches(userId) {
     let user = await this.getUser(userId);
     if (!user) {
       user = await this.createUser({
@@ -240,7 +183,7 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async addUserPokecoins(userId: string, amount: number): Promise<User> {
+  async addUserPokecoins(userId, amount) {
     let user = await this.getUser(userId);
     if (!user) {
       user = await this.createUser({
@@ -259,13 +202,12 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async deductUserPokecoins(userId: string, amount: number): Promise<User> {
+  async deductUserPokecoins(userId, amount) {
     let user = await this.getUser(userId);
     if (!user) {
       throw new Error("User not found");
     }
 
-    // Check if user has enough balance
     if (user.pokecoins < amount) {
       throw new Error(`Insufficient balance: User has ${user.pokecoins} Pokecoins but ${amount} is required`);
     }
@@ -281,7 +223,7 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async setUserPokecoins(userId: string, amount: number): Promise<User> {
+  async setUserPokecoins(userId, amount) {
     let user = await this.getUser(userId);
     if (!user) {
       throw new Error("User not found");
@@ -296,13 +238,13 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async resetUserStats(userId: string, type: "messages" | "catches" | "all"): Promise<User> {
+  async resetUserStats(userId, type) {
     const user = await this.getUser(userId);
     if (!user) {
       throw new Error("User not found");
     }
 
-    const updates: Partial<User> = {};
+    const updates = {};
     if (type === "messages" || type === "all") updates.messages = 0;
     if (type === "catches" || type === "all") updates.catches = 0;
 
@@ -315,7 +257,7 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async resetAllUserStats(type: "messages" | "catches" | "all"): Promise<void> {
+  async resetAllUserStats(type) {
     if (type === 'messages') {
       await db.update(users).set({ messages: 0 });
     } else if (type === 'catches') {
@@ -325,17 +267,17 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async setProofsChannel(channelId: string): Promise<void> {
+  async setProofsChannel(channelId) {
     const settings = await this.getBotSettings();
     await db.update(botSettings).set({ proofsChannelId: channelId }).where(eq(botSettings.id, settings.id));
   }
 
-  async setWithdrawalChannel(channelId: string): Promise<void> {
+  async setWithdrawalChannel(channelId) {
     const settings = await this.getBotSettings();
     await db.update(botSettings).set({ withdrawalChannelId: channelId }).where(eq(botSettings.id, settings.id));
   }
 
-  async addCountingChannel(channelId: string): Promise<void> {
+  async addCountingChannel(channelId) {
     const settings = await this.getBotSettings();
     const currentChannels = settings.countingChannels || [];
     if (!currentChannels.includes(channelId)) {
@@ -345,7 +287,7 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async removeCountingChannel(channelId: string): Promise<void> {
+  async removeCountingChannel(channelId) {
     const settings = await this.getBotSettings();
     const updatedChannels = settings.countingChannels.filter(id => id !== channelId);
     await db
@@ -354,7 +296,7 @@ export class DatabaseStorage implements IStorage {
       .where(eq(botSettings.id, settings.id));
   }
 
-  async createWithdrawalRequest(request: InsertWithdrawalRequest): Promise<WithdrawalRequest> {
+  async createWithdrawalRequest(request) {
     const result = await db
       .insert(withdrawalRequests)
       .values(request)
@@ -362,7 +304,7 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async getWithdrawalRequestByNumber(requestNumber: number): Promise<WithdrawalRequest | undefined> {
+  async getWithdrawalRequestByNumber(requestNumber) {
     const result = await db
       .select()
       .from(withdrawalRequests)
@@ -371,14 +313,14 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async getWithdrawalRequestsCount(): Promise<number> {
+  async getWithdrawalRequestsCount() {
     const result = await db
       .select()
       .from(withdrawalRequests);
     return result.length;
   }
 
-  async updateWithdrawalRequestStatus(requestNumber: number, status: string): Promise<WithdrawalRequest> {
+  async updateWithdrawalRequestStatus(requestNumber, status) {
     const result = await db
       .update(withdrawalRequests)
       .set({ status })
@@ -387,9 +329,7 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async completeWithdrawalIfPending(requestNumber: number): Promise<{ success: boolean; request?: WithdrawalRequest }> {
-    // Atomically update the request status to "completed" ONLY if it's currently "pending"
-    // This prevents race conditions where two moderators process the same request
+  async completeWithdrawalIfPending(requestNumber) {
     const result = await db
       .update(withdrawalRequests)
       .set({ status: "completed" })
@@ -397,25 +337,22 @@ export class DatabaseStorage implements IStorage {
       .returning();
     
     if (result.length === 0) {
-      // No rows were updated - either the request doesn't exist or it's already completed
       return { success: false };
     }
     
     return { success: true, request: result[0] };
   }
 
-
-  async getBotSettings(): Promise<BotSettings> {
+  async getBotSettings() {
     const result = await db.select().from(botSettings);
     if (result.length === 0) {
-      // Initialize default settings
       const newSettings = await db.insert(botSettings).values({}).returning();
       return newSettings[0];
     }
     return result[0];
   }
 
-  async updateMessageEventStatus(active: boolean): Promise<BotSettings> {
+  async updateMessageEventStatus(active) {
     const settings = await this.getBotSettings();
     const result = await db
       .update(botSettings)
@@ -425,7 +362,7 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async updateCatchEventStatus(active: boolean): Promise<BotSettings> {
+  async updateCatchEventStatus(active) {
     const settings = await this.getBotSettings();
     const result = await db
       .update(botSettings)
@@ -435,7 +372,7 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async updatePokecoinRate(rate: number): Promise<BotSettings> {
+  async updatePokecoinRate(rate) {
     const settings = await this.getBotSettings();
     const result = await db
       .update(botSettings)
@@ -445,7 +382,7 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async updateMessagesPerReward(count: number): Promise<BotSettings> {
+  async updateMessagesPerReward(count) {
     const settings = await this.getBotSettings();
     const result = await db
       .update(botSettings)
@@ -455,7 +392,7 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async updateCountingChannels(channels: string[]): Promise<BotSettings> {
+  async updateCountingChannels(channels) {
     const settings = await this.getBotSettings();
     const result = await db
       .update(botSettings)
@@ -465,7 +402,7 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async updateProofsChannel(channelId: string): Promise<BotSettings> {
+  async updateProofsChannel(channelId) {
     const settings = await this.getBotSettings();
     const result = await db
       .update(botSettings)
@@ -476,11 +413,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateAntiSpamSettings(
-    enabled: boolean,
-    timeWindow: number,
-    maxMessages: number,
-    minLength: number
-  ): Promise<BotSettings> {
+    enabled,
+    timeWindow,
+    maxMessages,
+    minLength
+  ) {
     const settings = await this.getBotSettings();
     const result = await db
       .update(botSettings)
@@ -496,18 +433,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createMessageWithSpamCheck(
-    content: string,
-    authorId: string,
-    channelId: string,
-    isBot: boolean
-  ): Promise<{ message: Message; spam: { blocked: boolean; reason?: string } }> {
-    // Check for spam if not a bot message
-    let spamCheck: { isSpam: boolean; reason?: string } = { isSpam: false };
+    content,
+    authorId,
+    channelId,
+    isBot
+  ) {
+    let spamCheck = { isSpam: false };
     if (!isBot) {
       spamCheck = await this.checkIsSpam(authorId, content, channelId);
     }
 
-    // Create message with spam flags
     const result = await db.insert(messages).values({
       content,
       authorId,
@@ -517,7 +452,6 @@ export class DatabaseStorage implements IStorage {
 
     const message = result[0];
 
-    // Update message with spam info
     if (spamCheck.isSpam || !spamCheck.isSpam) {
       const updated = await db
         .update(messages)
@@ -540,7 +474,7 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getMessagesByChannel(channelId: string, limit: number = 100): Promise<Message[]> {
+  async getMessagesByChannel(channelId, limit = 100) {
     return await db
       .select()
       .from(messages)
@@ -549,7 +483,7 @@ export class DatabaseStorage implements IStorage {
       .limit(limit);
   }
 
-  async getAllMessages(limit: number = 100): Promise<Message[]> {
+  async getAllMessages(limit = 100) {
     return await db
       .select()
       .from(messages)

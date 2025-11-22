@@ -1,5 +1,5 @@
-import { startDiscordBot } from "./discord-bot";
-import runApp from "./app";
+import { startDiscordBot } from "./discord-bot.js";
+import runApp from "./app.js";
 
 console.log("Starting Discord bot...");
 startDiscordBot();

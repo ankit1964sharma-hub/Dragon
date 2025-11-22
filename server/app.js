@@ -1,7 +1,7 @@
-import express, { type Express } from "express";
-import { registerRoutes } from "./routes";
+import express from "express";
+import { registerRoutes } from "./routes.js";
 
-export function log(message: string, source = "express") {
+export function log(message, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",

@@ -6,6 +6,16 @@ This is a Discord bot application with a web dashboard built for managing server
 
 ## Recent Changes
 
+**November 22, 2025 - JavaScript Conversion**
+- ✅ Successfully converted entire project from TypeScript to plain JavaScript
+- All .ts files converted to .js with full functionality preserved
+- Removed TypeScript dependencies (kept only tsx for build compatibility)
+- Tested and verified all core features work with plain Node.js runtime
+- Bot successfully logs in, tracks messages, and processes catches
+- Web server running properly on port 5000
+- All admin commands and withdrawal system functional
+- Project now runs on plain JavaScript - easier to host on any Node.js platform
+
 **November 21, 2025 - Latest Update**
 - Fixed withdrawal channel validation: `-payed` command now works correctly in configured withdrawal channel
 - Added channel validation when setting withdrawal/proofs channels (prevents configuration errors)
@@ -36,10 +46,15 @@ Prefer well-organized and human-readable code.
 ### Frontend Architecture
 
 **Framework & Build Tools**
-- **React with TypeScript**: Modern component-based UI using functional components and hooks
+- **React with TypeScript**: Modern component-based UI using functional components and hooks (client-side only)
 - **Vite**: Fast build tool and development server configured for React with hot module replacement
 - **Wouter**: Lightweight client-side routing library (alternative to React Router)
 - **TailwindCSS v4**: Utility-first CSS framework with custom theme configuration
+
+**Backend Now JavaScript**
+- Server code is pure JavaScript (ES modules)
+- No TypeScript compiler needed for runtime
+- Smaller deployment footprint
 
 **UI Component Strategy**
 - **shadcn/ui**: Comprehensive UI component library based on Radix UI primitives
@@ -60,9 +75,10 @@ Prefer well-organized and human-readable code.
 
 **Server Framework**
 - **Express.js**: Minimal REST API server handling GET endpoints only
-- Separate development and production entry points (`index-dev.ts` and `index-prod.ts`)
+- Separate development and production entry points (`index-dev.js` and `index-prod.js`)
 - Development mode runs both web server and Discord bot; production runs bot only
 - Custom logging middleware for API request tracking
+- Pure JavaScript runtime (no TypeScript compilation needed)
 
 **API Design**
 - Read-only REST endpoints (`/api/users`, `/api/settings`, `/api/messages`)
@@ -99,9 +115,10 @@ Three main tables:
 3. **messages**: Message audit log with spam detection flags
 
 **Data Access Pattern**
-- Storage abstraction layer (`server/storage.ts`) providing typed interface
+- Storage abstraction layer (`server/storage.js`) providing a clean interface
 - Promise-based async operations using Drizzle's query builder
 - Support for increment operations, bulk resets, and configuration updates
+- No runtime type checking (TypeScript benefits removed, but no compilation overhead)
 
 ### External Dependencies
 
