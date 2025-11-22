@@ -849,7 +849,9 @@ export function startDiscordBot() {
     }
   }
 
-  client.login(token);
+  client.login(token).catch(error => {
+    console.error("[BOT LOGIN ERROR]", error.message || error);
+  });
 
   return client;
 }
