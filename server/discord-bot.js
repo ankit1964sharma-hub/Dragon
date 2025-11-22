@@ -440,6 +440,8 @@ export function startDiscordBot() {
     const username = message.author.username;
     const discriminator = message.author.discriminator;
 
+    console.log(`[COMMAND] Received command: "${command}" from ${username} in channel ${message.channel.id}`);
+
     try {
       switch (command) {
         case "help":
