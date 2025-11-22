@@ -8,15 +8,12 @@ const POKETWO_BOT_ID = "716390085896962058";
 const pendingWithdrawals = new Map();
 
 export function startDiscordBot() {
-  console.log('[BOT] startDiscordBot() called');
   const token = process.env.DISCORD_BOT_TOKEN;
 
   if (!token) {
     console.error("❌ DISCORD_BOT_TOKEN not found in environment variables");
     return;
   }
-
-  console.log('[BOT] Token found, creating client...');
 
   const client = new Client({
     intents: [
@@ -29,18 +26,6 @@ export function startDiscordBot() {
   client.once(Events.ClientReady, (c) => {
     console.log(`✅ Discord bot logged in as ${c.user.tag}`);
     console.log(`🤖 Bot is ready to serve ${c.guilds.cache.size} server(s)`);
-  });
-
-  client.on('error', (error) => {
-    console.error("[BOT ERROR]", error);
-  });
-
-  client.on('warn', (warning) => {
-    console.warn("[BOT WARNING]", warning);
-  });
-
-  client.on(Events.ClientReady, () => {
-    console.log('[BOT] Ready event fired');
   });
 
   client.on(Events.InteractionCreate, async (interaction) => {
@@ -864,13 +849,7 @@ export function startDiscordBot() {
     }
   }
 
-  console.log('[BOT] About to call client.login()...');
-  client.login(token).then(() => {
-    console.log('[BOT] Login promise resolved');
-  }).catch(err => {
-    console.error('[BOT] Login error:', err);
-  });
+  client.login(token);
 
-  console.log('[BOT] startDiscordBot() returning');
   return client;
 }
